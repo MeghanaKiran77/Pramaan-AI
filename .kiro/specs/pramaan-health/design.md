@@ -2,9 +2,17 @@
 
 ## Overview
 
-Pramaan-Health implements a confidential AI training protocol that enables hospitals to contribute sensitive healthcare data for AI model training without exposing raw patient information. The system provides cryptographically verifiable trust through hardware-isolated execution, differential privacy enforcement, and comprehensive attestation mechanisms.
+Pramaan-Health implements a confidential AI training protocol that enables hospitals to contribute sensitive healthcare data for AI model training without exposing raw patient information. The system provides cryptographically verifiable trust through hardware-isolated execution, differential privacy enforcement, symmetric confidentiality protection (for both hospital data and developer IP), and comprehensive attestation mechanisms.
 
 The architecture follows a four-layer design: Policy Layer (The Handshake), Execution Layer (The Vault), Incentive Layer (The Settlement), and Trust & Compliance Layer (The Proof). Each layer provides specific guarantees while maintaining end-to-end security and regulatory compliance.
+
+**Core Governance Principles:**
+- **Social Credits** are non-monetary, non-transferable, auditable units of verified impact representing institutional contribution (not individual patient tracking)
+- **Deterministic Credit Minting** based on normalized improvement scores with protocol-defined caps to prevent gaming
+- **Standardized Redemption** through capped, time-bound API/inference credits for public-sector usage (no negotiations, no IP conflicts)
+- **Template-Driven Manifests** with structural constraints (not AI-generated free-form contracts)
+- **Symmetric Confidentiality** protecting both hospital data and developer IP through enclave isolation
+- **Institutional Verification** via DigiLocker document validation (not Aadhaar-based)
 
 ## Architecture
 
@@ -65,75 +73,125 @@ graph TB
 ### Policy Layer Components
 
 **Protocol Manifest Validator**
-- Validates machine-readable policy documents against schema
+- Validates machine-readable policy documents against template-defined schemas
 - Enforces purpose limitation, dataset scope, and privacy constraints
-- Supports versioning and template management
+- Supports versioning with immutability guarantees after job start
+- Validates manifest hash to prevent retroactive edits
 - Interface: REST API for manifest CRUD operations
 
+**Manifest Template Manager**
+- Provides healthcare-specific templates: diagnostic classification (public health), diagnostic classification (research), segmentation, risk scoring
+- Predefines allowed metrics, normalization methods, credit mapping, caps, and redemption mechanics
+- Prevents AI-generated free-form contracts through structural constraints
+- Interface: Template selection and instantiation API
+
 **Request Processor**
-- Processes AI developer training requests
+- Processes AI developer training requests with binary acceptance model
 - Validates requests against approved Protocol Manifests
 - Manages request lifecycle and status tracking
+- Enforces no post-hoc negotiation policy
 - Interface: GraphQL API for request submission and tracking
+
+**DigiLocker Verification Service**
+- Verifies hospital institutional authority via document validation
+- Validates registration certificates, government affiliation documents, authorization letters
+- Checks issuer authenticity and document validity
+- Does NOT store Aadhaar numbers or process biometric data
+- Interface: DigiLocker API integration for institutional verification
 
 ### Execution Layer Components
 
 **Secure Enclave Manager**
 - Manages AWS Nitro Enclave lifecycle
 - Handles enclave attestation and integrity verification
-- Controls data ingress/egress policies
+- Controls data ingress/egress policies with network isolation
+- Validates Enclave Image File (.eif) hash without inspecting internals
 - Interface: Internal service with hardware attestation APIs
 
 **Data Decryption Service**
 - Decrypts healthcare data within enclave memory only
 - Implements zero-persistence data handling
-- Manages hospital encryption keys securely
+- Manages hospital encryption keys securely via AWS KMS
 - Interface: Internal enclave service with key management integration
 
 **DP-SGD Training Engine**
 - Implements differentially private stochastic gradient descent
 - Tracks privacy budget consumption (epsilon, delta parameters)
 - Enforces training termination on budget exhaustion
+- Executes developer-submitted .eif code without external inspection
 - Interface: Internal training API with privacy accounting
 
 **Model Evaluator**
 - Evaluates trained models against success metrics within trusted boundary
-- Computes performance improvements over baseline models
+- Computes baseline metrics and new model metrics inside enclave
+- Calculates Normalized Improvement Score (NIS) using protocol-defined formula
 - Prevents metric manipulation by external parties
 - Interface: Internal evaluation service with metric computation APIs
 
+**Symmetric Confidentiality Enforcer**
+- Ensures hospital data never leaves enclave in raw form
+- Ensures developer IP (code, weights, evaluation logic) never leaves enclave
+- Allows only aggregated outputs: verified metrics, NIS, credits, signed receipts
+- Prevents persistence of proprietary artifacts outside enclave
+- Interface: Internal enclave boundary control
+
 ### Incentive Layer Components
 
-**Credit Calculator**
-- Computes Social Credits based on verified performance improvements
-- Implements incentive logic from Protocol Manifests
-- Validates credit allocation rules
+**Normalized Improvement Score (NIS) Calculator**
+- Computes NIS using formula: NIS = (NewMetric - BaselineMetric) / (1 - BaselineMetric)
+- Accounts for diminishing returns at high baseline performance
+- Ensures consistent improvement quantification across different baseline levels
+- Interface: Internal calculation service
+
+**Credit Minting Engine**
+- Mints Social Credits deterministically based on protocol-defined credit bands
+- Maps NIS ranges to specific credit amounts (no hospital discretion)
+- Enforces hard caps: max credits per run (e.g., 500 SC), max per hospital per model per year (e.g., 5,000 SC)
+- Prevents credit inflation through protocol-level constraints
+- Allocates credits to institutional recipients (Hospital/Data Fiduciary), not individuals
 - Interface: Internal service with settlement integration
 
 **Settlement Ledger**
-- Records credit transactions on permissioned blockchain
-- Routes credits to designated public health funds
-- Maintains immutable transaction history
+- Records credit transactions on permissioned blockchain (Amazon Managed Blockchain - Hyperledger Fabric)
+- Maintains immutable transaction history with institutional recipients
+- Does NOT track individual patient-level credit allocation
 - Interface: Blockchain RPC with smart contract integration
+
+**Redemption Manager**
+- Manages standardized Model Access redemption: capped, time-bound API/inference credits
+- Enforces public-sector usage restrictions
+- Prevents lifetime free access or unlimited licensing
+- Supports optional institutional allocation records without monetary transfer
+- Interface: Redemption API with usage tracking
 
 ### Trust & Compliance Layer Components
 
 **Attestation Generator**
-- Creates cryptographically signed attestation receipts
+- Creates cryptographically signed attestation receipts with hardware-backed keys
 - Includes proofs of policy enforcement and privacy compliance
 - Generates merkle proofs of execution integrity
+- Embeds compliance statements in receipts
+- References manifest hash to prevent retroactive edits
 - Interface: Internal service with hardware signing keys
+
+**Visibility Control Manager**
+- Enforces role-based visibility: Hospital sees credits + receipts, Developer sees own job outcomes, Regulator sees audit trails (if granted), Public sees aggregate stats only
+- Prevents exposure of credits as public social media-style metrics
+- Ensures no dataset or patient identifiers in public data
+- Interface: Access control API with role-based permissions
 
 **Audit Repository**
 - Stores compliance artifacts and audit trails
 - Provides tamper-evident logging capabilities
 - Supports regulatory reporting requirements
+- Maintains immutable logs for forensic analysis
 - Interface: REST API for audit data retrieval
 
 **Regulatory Interface**
 - Provides standardized compliance reporting
 - Enables third-party attestation verification
 - Supports DPDP Act reporting requirements
+- Delivers judge-proof compliance statements
 - Interface: REST API with regulatory data formats
 
 ## Data Models
@@ -144,10 +202,19 @@ graph TB
 {
   "manifestId": "string (UUID)",
   "version": "string (semver)",
+  "manifestHash": "string (SHA-256 hash for immutability)",
+  "templateType": "enum (diagnostic-classification-public-health, diagnostic-classification-research, segmentation, risk-scoring)",
   "hospital": {
     "id": "string",
     "name": "string",
-    "publicKey": "string (PEM)"
+    "publicKey": "string (PEM)",
+    "digiLockerVerification": {
+      "registrationCertificate": "string (document ID)",
+      "governmentAffiliation": "string (document ID)",
+      "authorizationLetter": "string (document ID)",
+      "verificationStatus": "enum (verified, pending, failed)",
+      "verificationTimestamp": "timestamp"
+    }
   },
   "purposeLimitation": {
     "allowedPurposes": ["string"],
@@ -171,15 +238,40 @@ graph TB
   },
   "successMetrics": {
     "primaryMetric": "string",
+    "baselineMetric": "number",
     "threshold": "number",
-    "evaluationMethod": "string"
+    "evaluationMethod": "string",
+    "normalizationFormula": "string (e.g., NIS = (NewMetric - BaselineMetric) / (1 - BaselineMetric))"
   },
   "incentiveLogic": {
-    "baseCredits": "integer",
-    "performanceMultiplier": "number",
-    "fundDestination": "string"
+    "creditBands": [
+      {
+        "nisRange": {"min": "number", "max": "number"},
+        "creditsAwarded": "integer"
+      }
+    ],
+    "maxCreditsPerRun": "integer (e.g., 500)",
+    "maxCreditsPerHospitalPerModelPerYear": "integer (e.g., 5000)",
+    "institutionalRecipient": "string (Hospital/Data Fiduciary ID)"
   },
-  "signature": "string (cryptographic signature)"
+  "redemptionMechanics": {
+    "modelAccessRequired": "boolean",
+    "modelAccessTerms": {
+      "type": "enum (api-inference-credits)",
+      "cappedCredits": "integer",
+      "timeBound": "duration",
+      "usageRestriction": "enum (public-sector-only)"
+    },
+    "optionalInstitutionalAllocation": "string (program-level public health fund)"
+  },
+  "developerAcceptance": {
+    "acceptanceRequired": "boolean",
+    "acceptanceType": "enum (binary-accept-decline)",
+    "noNegotiation": "boolean (true)"
+  },
+  "signature": "string (cryptographic signature)",
+  "createdAt": "timestamp",
+  "immutableAfterJobStart": "boolean (true)"
 }
 ```
 
@@ -189,10 +281,23 @@ graph TB
 {
   "requestId": "string (UUID)",
   "manifestId": "string (UUID)",
+  "manifestVersion": "string (semver)",
+  "manifestHash": "string (SHA-256 for verification)",
   "aiDeveloper": {
     "id": "string",
     "name": "string",
-    "publicKey": "string (PEM)"
+    "publicKey": "string (PEM)",
+    "manifestAcceptance": {
+      "accepted": "boolean",
+      "acceptanceTimestamp": "timestamp",
+      "acceptanceSignature": "string (cryptographic signature)"
+    }
+  },
+  "enclaveImageFile": {
+    "eifHash": "string (SHA-256 hash)",
+    "eifSize": "integer (bytes)",
+    "eifUploadTimestamp": "timestamp",
+    "containsProprietaryCode": "boolean (true - not inspected by controller)"
   },
   "modelSpecification": {
     "architecture": "string",
@@ -217,11 +322,13 @@ graph TB
   "receiptId": "string (UUID)",
   "requestId": "string (UUID)",
   "manifestId": "string (UUID)",
+  "manifestHash": "string (SHA-256 - prevents retroactive edits)",
   "executionSummary": {
     "startTime": "timestamp",
     "endTime": "timestamp",
     "enclaveId": "string",
-    "enclaveAttestation": "string (base64)"
+    "enclaveAttestation": "string (base64)",
+    "eifHash": "string (SHA-256 - verified but not inspected)"
   },
   "policyEnforcement": {
     "purposeCompliance": "boolean",
@@ -238,19 +345,128 @@ graph TB
     "destructionProof": "string (cryptographic proof)"
   },
   "performanceResults": {
-    "metricValue": "number",
-    "improvementScore": "number",
-    "creditsAwarded": "integer"
+    "baselineMetric": "number",
+    "newMetric": "number",
+    "normalizedImprovementScore": "number (NIS)",
+    "nisFormula": "string (e.g., (NewMetric - BaselineMetric) / (1 - BaselineMetric))",
+    "creditsAwarded": "integer",
+    "creditBandApplied": "string",
+    "institutionalRecipient": "string (Hospital/Data Fiduciary ID)",
+    "noIndividualPatientTracking": "boolean (true)"
+  },
+  "redemptionDetails": {
+    "modelAccessGranted": "boolean",
+    "apiInferenceCredits": "integer",
+    "timeBound": "duration",
+    "usageRestriction": "string (public-sector-only)",
+    "noLifetimeFreeAccess": "boolean (true)",
+    "noCashOut": "boolean (true)"
   },
   "cryptographicProofs": {
     "executionIntegrity": "string (merkle proof)",
     "outputConstraints": "string (proof)",
-    "chainOfCustody": "string (proof)"
+    "chainOfCustody": "string (proof)",
+    "symmetricConfidentiality": "string (proof - both hospital data and developer IP protected)"
+  },
+  "visibilityControl": {
+    "hospitalVisible": "boolean (true)",
+    "developerVisible": "boolean (true - own job only)",
+    "regulatorVisible": "boolean (if granted)",
+    "publicVisible": "boolean (aggregate stats only, no identifiers)"
   },
   "signature": "string (hardware-backed signature)",
-  "timestamp": "timestamp"
+  "timestamp": "timestamp",
+  "complianceStatements": [
+    "Credits are not money and cannot be cashed out",
+    "No individual patient tracking for credit allocation",
+    "Model access is standardized as capped API/inference credits",
+    "Developers accept manifest or decline; no post-hoc negotiation",
+    "Institutional verification is document-based via DigiLocker; Pramaan does not access Aadhaar data"
+  ]
 }
 ```
+
+## Social Credit Governance Model
+
+### What Social Credits Are
+
+Social Credits (SC) are **non-monetary, non-transferable, auditable units of verified impact** that represent institutional contribution to measurable model performance improvement.
+
+**Key Characteristics:**
+- NOT cash, NOT cryptocurrency for speculation, NOT tradable
+- NOT held by individuals or tracked at patient level
+- Protocol-level accounting units representing "verified contribution" of a data fiduciary's dataset
+- Benefit institutions and public-interest entities, not individuals
+
+### Credit Minting Logic (Anti-Gaming)
+
+**Core Principle:** Credits are minted ONLY based on verified outcome improvement, not based on data quantity, age, or claimed quality directly.
+
+**Deterministic Minting Process:**
+1. Baseline metrics computed inside enclave
+2. Trained model metrics computed inside enclave
+3. Normalized Improvement Score (NIS) calculated: `NIS = (NewMetric - BaselineMetric) / (1 - BaselineMetric)`
+4. NIS mapped to credits via protocol-defined credit bands
+5. Hard caps enforced automatically
+
+**Why Normalization Matters:**
+Raw metric deltas can be misleading (0.02 improvement from 0.50 baseline vs. 0.98 baseline have very different significance). NIS normalization ensures:
+- Same delta "worth more" when baseline is low
+- Same delta "worth less" when baseline is already high
+- Consistent valuation across different performance regimes
+
+**Protocol-Defined Constraints:**
+- Credit bands map NIS ranges to SC amounts (hospitals cannot arbitrarily assign)
+- Max credits per training run (e.g., 500 SC)
+- Max credits per hospital per model per year (e.g., 5,000 SC)
+- Hospitals choose a template, not the numeric credit table
+
+### Credit Visibility Model
+
+**Hospital/Data Fiduciary:** Full visibility to credits earned and attestation receipts
+
+**AI Developer:** Sees credit impact outcome only for their own training jobs
+
+**Regulator/Auditor:** Read-only access to receipts and audit trails (when granted)
+
+**Public:** Optional aggregate statistics only (no dataset or patient identifiers)
+
+**NOT Public Metrics:** Credits are NOT exposed as social media-style follower counters or public leaderboards
+
+### Credit Redemption (v1 Final Decision)
+
+**Definition:** "Redeem" = convert credits into predefined institutional benefits, NOT cash-out, NOT individual payments, NOT trading
+
+**Primary Redemption Mechanism:**
+- **Model Access** = Capped, time-bound API/inference credits for public-sector usage only
+- NO lifetime free access
+- NO unlimited licensing
+- NO weight/code transfer
+
+**Why This Design:**
+- Prevents business clash: AI developers won't agree to "free forever"
+- Protects developer IP: model stays under developer control
+- Creates deterministic economics: API credits have measurable cost
+- Eliminates negotiation ambiguity: single standardized access form
+
+**Developer Acceptance Model:**
+- Hospital chooses whether Model Access is required in manifest
+- Developer decision is binary: accept manifest terms OR decline
+- NO post-hoc negotiation of redemption terms
+- NO runtime choice among multiple redemption types
+
+**Optional Parallel Mechanisms:**
+- Institutional allocation records (e.g., program-level public health fund allocation)
+- No monetary transfer required in MVP
+
+### Judge-Proof Compliance Statements
+
+All attestation receipts include:
+- "Credits are not money and cannot be cashed out"
+- "No individual patient tracking for credit allocation"
+- "Model access is standardized as capped API/inference credits to avoid IP risk and ensure adoption"
+- "Developers accept a manifest or decline; no post-hoc negotiation"
+- "Institutional verification is document-based via DigiLocker; Pramaan does not access Aadhaar data"
 
 ## Correctness Properties
 
@@ -259,34 +475,50 @@ graph TB
 Based on the prework analysis, I've identified the following testable properties while eliminating redundancy:
 
 **Property 1: Protocol Manifest Validation**
-*For any* Protocol Manifest, the system should validate it against the complete schema and ensure all required fields (purpose limitation, dataset scope, privacy guardrails, success metrics, incentive logic) are present and valid
-**Validates: Requirements 1.1, 1.2, 7.2**
+*For any* Protocol Manifest, the system should validate it against the template-defined schema and ensure all required fields (purpose limitation, dataset scope, privacy guardrails, success metrics, incentive logic with credit bands and caps, redemption mechanics) are present and valid
+**Validates: Requirements 1.1, 1.2, 7.2, 7.3**
 
-**Property 2: Request-Manifest Compliance**
+**Property 2: Manifest Immutability After Job Start**
+*For any* training job execution, the Protocol Manifest version used must remain immutable throughout execution, with manifest hash verification preventing retroactive edits
+**Validates: Requirements 7.5, 7.6**
+
+**Property 2: Manifest Immutability After Job Start**
+*For any* training job execution, the Protocol Manifest version used must remain immutable throughout execution, with manifest hash verification preventing retroactive edits
+**Validates: Requirements 7.5, 7.6**
+
+**Property 3: Request-Manifest Compliance**
 *For any* training request and Protocol Manifest pair, the system should correctly validate the request against manifest constraints and reject requests that violate policy parameters
 **Validates: Requirements 1.3, 1.4**
 
-**Property 3: Policy Violation Response**
+**Property 4: Binary Developer Acceptance**
+*For any* training request, the AI Developer acceptance must be binary (accept all manifest terms or decline), with no post-hoc negotiation allowed
+**Validates: Requirements 7.9, 7.10**
+
+**Property 5: Policy Violation Response**
 *For any* detected policy violation during execution, the system should terminate execution and generate violation attestations
 **Validates: Requirements 1.5**
 
-**Property 4: Network Isolation During Training**
+**Property 6: Enclave Image File Protection**
+*For any* developer-submitted Enclave Image File (.eif), the system should validate the .eif hash but NOT inspect internal code, weights, or evaluation logic, ensuring developer IP protection
+**Validates: Requirements 2.6, 2.7**
+
+**Property 7: Network Isolation During Training**
 *For any* training execution within the secure enclave, all network egress attempts should be denied by default
 **Validates: Requirements 2.2**
 
-**Property 5: Data Destruction After Training**
+**Property 8: Data Destruction After Training**
 *For any* completed training session, all decrypted healthcare data should be destroyed from memory and not persist to storage
 **Validates: Requirements 2.3, 2.4**
 
-**Property 6: Integrity Compromise Response**
+**Property 9: Integrity Compromise Response**
 *For any* enclave integrity compromise event, the system should halt execution and generate security alerts
 **Validates: Requirements 2.5**
 
-**Property 7: Differential Privacy Application**
+**Property 10: Differential Privacy Application**
 *For any* training execution, differential privacy should be applied during gradient computation using DP-SGD with proper noise addition
 **Validates: Requirements 3.1**
 
-**Property 8: Privacy Budget Management**
+**Property 11: Privacy Budget Management**
 *For any* training session, the privacy budget should be initialized from manifest specifications, tracked throughout training, and cause training termination when exhausted, with cryptographic proof of usage generated
 **Validates: Requirements 3.2, 3.3, 3.4, 3.5**
 
@@ -302,47 +534,71 @@ Based on the prework analysis, I've identified the following testable properties
 *For any* model output, attestations proving output constraint compliance should be generated
 **Validates: Requirements 4.5**
 
-**Property 12: Performance Evaluation and Credit Calculation**
-*For any* completed training, performance should be evaluated against Protocol Manifest success metrics and Social Credits should be computed based on verified improvements
-**Validates: Requirements 5.1, 5.2**
+**Property 12: Normalized Improvement Score Calculation**
+*For any* completed training, the system should compute Normalized Improvement Score using the formula NIS = (NewMetric - BaselineMetric) / (1 - BaselineMetric) to account for diminishing returns at high baseline performance
+**Validates: Requirements 5.2**
 
-**Property 13: Credit Settlement**
-*For any* performance that meets threshold criteria, credit allocation should be recorded on the Settlement Ledger and routed to designated public health funds
-**Validates: Requirements 5.3, 5.4**
+**Property 13: Deterministic Credit Minting with Caps**
+*For any* training execution, Social Credits should be minted deterministically based on protocol-defined credit bands mapping NIS ranges to credit amounts, with enforcement of hard caps (max per run, max per hospital per model per year), and allocation to institutional recipients only (no individual patient tracking)
+**Validates: Requirements 5.3, 5.4, 5.7, 5.8, 5.9**
 
-**Property 14: Comprehensive Attestation Generation**
-*For any* system execution, time-stamped Attestation Receipts should be generated with cryptographic signatures, including proofs of differential privacy compliance, data destruction, and execution integrity using hardware-backed keys and merkle proofs
-**Validates: Requirements 5.5, 6.1, 6.2, 6.3, 8.1, 8.3**
+**Property 14: Credit Settlement to Institutional Recipients**
+*For any* credit allocation, the Settlement Ledger should record transactions with institutional recipients (Hospital/Data Fiduciary) and NOT track individual patient-level allocations
+**Validates: Requirements 5.5**
 
-**Property 15: Audit Compliance**
+**Property 15: Standardized Model Access Redemption**
+*For any* redemption request, the system should provide only standardized Model Access (capped, time-bound API/inference credits for public-sector usage), with no lifetime free access, no unlimited licensing, and no cash-out capability
+**Validates: Requirements 6A.2, 6A.3, 6A.4, 6A.8**
+
+**Property 15: Standardized Model Access Redemption**
+*For any* redemption request, the system should provide only standardized Model Access (capped, time-bound API/inference credits for public-sector usage), with no lifetime free access, no unlimited licensing, and no cash-out capability
+**Validates: Requirements 6A.2, 6A.3, 6A.4, 6A.8**
+
+**Property 16: Comprehensive Attestation Generation**
+*For any* system execution, time-stamped Attestation Receipts should be generated with cryptographic signatures, including proofs of differential privacy compliance, data destruction, execution integrity using hardware-backed keys and merkle proofs, manifest hash references, and judge-proof compliance statements
+**Validates: Requirements 5.6, 6.1, 6.2, 6.3, 6A.8, 8.1, 8.3**
+
+**Property 17: Visibility Control Enforcement**
+*For any* credit or attestation data, the system should enforce role-based visibility (Hospital sees credits+receipts, Developer sees own job only, Regulator sees audit trails if granted, Public sees aggregate stats only with no identifiers)
+**Validates: Requirements 6.6, 6.7, 6.8, 6.9, 6.10**
+
+**Property 18: Audit Compliance**
 *For any* audit request, the system should provide verifiable compliance artifacts and maintain immutable logs of all system interactions
 **Validates: Requirements 6.4, 6.5**
 
-**Property 16: Manifest Versioning and Notifications**
+**Property 19: Manifest Versioning and Notifications**
 *For any* Protocol Manifest update, the system should support versioning for iterative refinement and notify affected AI Developers of changes
-**Validates: Requirements 7.3, 7.5**
+**Validates: Requirements 7.3, 7.7**
 
-**Property 17: Template Functionality**
-*For any* common healthcare use case, Protocol Manifest templates should be available and function correctly
-**Validates: Requirements 7.4**
+**Property 20: Template Functionality**
+*For any* common healthcare use case, Protocol Manifest templates should be available with predefined metrics, normalization, credit mapping, and redemption mechanics
+**Validates: Requirements 7.1, 7.2**
 
-**Property 18: Public Key Infrastructure**
+**Property 21: DigiLocker Institutional Verification**
+*For any* hospital registration, the system should verify institutional authority via DigiLocker document validation (registration certificates, government affiliation, authorization letters) without storing Aadhaar numbers or processing biometric data
+**Validates: Requirements 9.6, 9.7, 9.8**
+
+**Property 22: Public Key Infrastructure**
 *For any* attestation verification request, the PKI should enable third-party verification without system access and maintain cryptographic chain of custody
 **Validates: Requirements 8.2, 8.4, 8.5**
 
-**Property 19: Healthcare Data Format Support**
+**Property 23: Healthcare Data Format Support**
 *For any* healthcare data in standard formats (HL7 FHIR, DICOM), the system should correctly parse, validate integrity and completeness, and encrypt using hospital-controlled keys
 **Validates: Requirements 9.1, 9.2, 9.3**
 
-**Property 20: Secure API Functionality**
+**Property 24: Secure API Functionality**
 *For any* API request for Protocol Manifest management or healthcare system integration, the system should implement proper security controls and provide detailed error diagnostics for failures
-**Validates: Requirements 7.1, 9.4, 9.5**
+**Validates: Requirements 7.8, 9.4, 9.5**
 
-**Property 21: System Monitoring and Alerting**
+**Property 25: Symmetric Confidentiality Protection**
+*For any* training execution, the system should ensure only aggregated outputs leave the enclave (verified metrics, NIS, credits, receipts) and NOT persist proprietary developer code, weights, or research artifacts outside the enclave
+**Validates: Requirements 2.8, 2.9**
+
+**Property 26: System Monitoring and Alerting**
 *For any* system operation, real-time monitoring should track enclave health and performance, generate alerts for violations and incidents, and trigger automated incident response procedures
 **Validates: Requirements 10.1, 10.2, 10.3**
 
-**Property 22: Dashboard and Audit Logging**
+**Property 27: Dashboard and Audit Logging**
 *For any* system metric or interaction, dashboards should display accurate tracking information and audit logs should maintain tamper-evident properties for forensic analysis
 **Validates: Requirements 10.4, 10.5**
 
