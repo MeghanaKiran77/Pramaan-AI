@@ -334,3 +334,69 @@ Pramaan-Health is a pilot implementation of the Pramaan AI protocol that enables
 4. THE Pramaan_System SHALL support batch export for multiple training jobs
 5. THE Pramaan_System SHALL include cryptographic signature on exported compliance reports
 6. THE Pramaan_System SHALL maintain export audit trail for regulatory review
+
+### Requirement 23: Secrets Management
+
+**User Story:** As a system operator, I want secure secrets management, so that credentials are never exposed in code or logs.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL use AWS Secrets Manager for all sensitive credentials (database credentials, signing keys, API tokens)
+2. THE Pramaan_System SHALL NOT store long-lived AWS keys in code, configuration files, or UI
+3. THE Pramaan_System SHALL rotate secrets regularly (minimum monthly rotation)
+4. THE Pramaan_System SHALL use IAM roles for service-to-service authentication (no static keys)
+5. THE Pramaan_System SHALL audit all secret access via CloudTrail
+6. THE Pramaan_System SHALL use KMS for signing keys where possible instead of Secrets Manager
+
+### Requirement 24: Network Isolation and Architecture
+
+**User Story:** As a security architect, I want proper network isolation, so that sensitive services are not exposed to public internet.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL deploy services in AWS VPC with private and public subnets
+2. THE database and orchestrator services SHALL run in private subnets (no direct internet access)
+3. THE API Gateway and load balancer SHALL run in public subnets only
+4. THE Pramaan_System SHALL use VPC endpoints for S3 and KMS access (avoid public internet paths)
+5. THE Pramaan_System SHALL implement security groups with least privilege network access
+6. THE Pramaan_System SHALL enable VPC Flow Logs for network traffic monitoring
+
+### Requirement 25: Supply Chain Security
+
+**User Story:** As a security engineer, I want supply chain security controls, so that dependencies and artifacts are trustworthy.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL lock all Python dependencies with pinned versions (requirements.txt with hashes)
+2. THE Pramaan_System SHALL use dependency scanning (GitHub Dependabot or equivalent)
+3. THE Pramaan_System SHALL sign container images for deployment verification
+4. THE Pramaan_System SHALL run CI checks: linting, unit tests, schema validation, security scans
+5. THE Pramaan_System SHALL maintain Software Bill of Materials (SBOM) for all dependencies
+6. THE Pramaan_System SHALL verify .eif image signatures before execution
+
+### Requirement 26: Enhanced Data Protection
+
+**User Story:** As a compliance officer, I want comprehensive data protection controls, so that PHI is never exposed in logs or error messages.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL encrypt all data at rest: S3 (SSE-KMS), databases (encryption at rest), EBS volumes
+2. THE Pramaan_System SHALL encrypt all data in transit using TLS 1.3 (minimum TLS 1.2)
+3. THE Pramaan_System SHALL enforce HSTS (HTTP Strict Transport Security) on all web endpoints
+4. THE Pramaan_System SHALL use separate KMS keys by domain: hospital data keys (hospital-controlled CMK), Pramaan metadata keys (Pramaan CMK)
+5. THE Pramaan_System SHALL redact all PHI from logs, error messages, and attestation receipts
+6. THE Pramaan_System SHALL implement data minimization: only collect and store necessary data
+7. THE Pramaan_System SHALL enable MFA for all privileged users (hospital admins, system operators)
+
+### Requirement 27: Enhanced Monitoring and Incident Response
+
+**User Story:** As a security operator, I want comprehensive monitoring and alerting, so that security incidents are detected and responded to quickly.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL enable AWS CloudTrail for all control plane actions
+2. THE Pramaan_System SHALL centralize logs in CloudWatch with retention policies
+3. THE Pramaan_System SHALL alert on: policy violations, repeated failed logins, IAM policy changes, unexpected S3 access patterns, enclave integrity failures
+4. THE Pramaan_System SHALL keep all logs redacted (no PHI in logs)
+5. THE Pramaan_System SHALL implement automated incident response for critical alerts
+6. THE Pramaan_System SHALL maintain security incident audit trail

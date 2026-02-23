@@ -821,7 +821,115 @@ Based on the prework analysis, I've identified the following testable properties
 *For any* compliance export request, the system should generate structured JSON reports with manifest ID, purpose, dataset scope, privacy budget, attestation hash, credit events, and cryptographic signatures
 **Validates: Requirements 22.1, 22.2, 22.3, 22.4, 22.5, 22.6**
 
+**Property 39: Secrets Management Security**
+*For any* sensitive credential, the system should store it in AWS Secrets Manager, never in code or config files, rotate regularly, and audit all access via CloudTrail
+**Validates: Requirements 23.1, 23.2, 23.3, 23.4, 23.5**
+
+**Property 40: Network Isolation**
+*For any* sensitive service (database, orchestrator), the system should deploy in private VPC subnets with no direct internet access, use VPC endpoints for AWS services, and enforce security groups with least privilege
+**Validates: Requirements 24.1, 24.2, 24.3, 24.4, 24.5, 24.6**
+
+**Property 41: Supply Chain Security**
+*For any* dependency or container image, the system should use locked versions with hashes, scan for vulnerabilities, sign images, and run CI security checks
+**Validates: Requirements 25.1, 25.2, 25.3, 25.4, 25.5, 25.6**
+
+**Property 42: Enhanced Data Protection**
+*For any* data at rest or in transit, the system should use encryption (SSE-KMS, TLS 1.3, HSTS), separate KMS keys by domain, redact PHI from logs, and enforce MFA for privileged users
+**Validates: Requirements 26.1, 26.2, 26.3, 26.4, 26.5, 26.6, 26.7**
+
+**Property 43: Enhanced Monitoring and Incident Response**
+*For any* system operation, CloudTrail should log control plane actions, CloudWatch should centralize logs with PHI redaction, and alerts should trigger for security events with automated incident response
+**Validates: Requirements 27.1, 27.2, 27.3, 27.4, 27.5, 27.6**
+
 ## Implementation Decisions and Scope
+
+### Security Architecture (Must-Do for MVP)
+
+**1. Identity, Access, and Roles**
+- RBAC from day 1 with roles: hospital_admin, hospital_compliance, ai_developer, regulator_readonly, system_operator
+- Least privilege IAM everywhere (no wildcard * actions)
+- MFA for all privileged users (hospital admins, operators)
+- Short-lived credentials only (no long-lived AWS keys in code/UI)
+- AWS Cognito for user authentication, IAM roles for service authentication
+
+**2. Data Protection Baseline**
+- Encrypt everything at rest: S3 (SSE-KMS), databases (encryption at rest), EBS volumes
+- Encrypt in transit: TLS 1.3 everywhere (minimum TLS 1.2), HSTS on web endpoints
+- Separate KMS keys by domain:
+  - Hospital data keys: hospital-controlled CMK
+  - Pramaan metadata keys: Pramaan CMK
+- No raw PHI in logs, receipts, or error messages (strict redaction)
+- Data minimization: only collect and store necessary data
+
+**3. Enclave Hardening (Trust Boundary)**
+- No network egress from enclave (default deny)
+- Zero persistence: write nothing to disk, wipe on completion
+- Attestation-gated key release: KMS releases data key only if PCRs match approved enclave image
+- Hash pinning: pin .eif hash and version in manifest/request record
+- Symmetric confidentiality: protect both hospital data and developer IP
+
+**4. Manifest and Request Integrity**
+- Sign manifests with hospital signing key, verify signatures on every use
+- Version manifests with immutability per job
+- Schema validation with strict allowlists (purpose, metric types, redemption class, caps)
+- Manifest hash in attestation receipts prevents retroactive edits
+
+**5. Attestation Receipt Integrity**
+- Receipt includes: manifest hash + version, enclave measurements (PCRs/image hash), evaluation digest, DP budget used, credit mint outcome
+- Sign receipt with hardware-backed key (KMS for MVP)
+- Store receipts in immutable storage (S3 Object Lock for pilot)
+- Receipt is the compliance artifact
+
+**6. Secure .eif Handling**
+- Store .eif in separate S3 bucket with encryption at rest
+- Short retention with auto-delete policy
+- Strict access policy (only orchestrator role)
+- Validate .eif hash before execution
+- Use pre-signed upload URLs (no public upload endpoints)
+- Prevents supply-chain attacks and artifact leakage
+
+**7. Logging, Monitoring, and Alerting**
+- Enable CloudTrail for all control plane actions
+- Centralize logs in CloudWatch with retention policies
+- Alert on: policy violations, repeated failed logins, IAM policy changes, unexpected S3 access patterns, enclave integrity failures
+- Keep logs redacted (no PHI)
+- Security without visibility is theater
+
+**8. Secrets Management**
+- Use AWS Secrets Manager for: database credentials, signing keys (if not using KMS), API tokens
+- Rotate secrets regularly (minimum monthly)
+- Never store secrets in code, config files, or environment variables
+- Audit all secret access via CloudTrail
+
+**9. Network Isolation**
+- Deploy in VPC with private and public subnets
+- Private subnets: database, orchestrator, enclave parent instances
+- Public subnets: API Gateway, load balancer only
+- Use VPC endpoints for S3/KMS (avoid public internet paths)
+- Security groups with least privilege network access
+- Enable VPC Flow Logs for traffic monitoring
+
+**10. WAF and API Throttling**
+- Deploy AWS WAF in front of portals and APIs
+- Rate-limit endpoints: auth, request submission, receipt verification
+- Per-organization request quotas
+- DDoS protection and suspicious pattern detection
+- Geographic restrictions (optional)
+
+**11. Supply Chain Security**
+- Lock Python dependencies with pinned versions and hashes (requirements.txt)
+- Use dependency scanning (GitHub Dependabot)
+- Sign container images for deployment verification
+- CI checks: linting, unit tests, schema validation, security scans
+- Maintain Software Bill of Materials (SBOM)
+- Verify .eif image signatures before execution
+
+**12. Privacy Assurance (DP)**
+- Use Opacus library (not custom DP implementation)
+- Log ε spent and δ spent in attestation receipts
+- Implement "privacy budget exhaustion → terminate" behavior
+- Real-time privacy accounting with RDP composition
+- Cryptographic proof of privacy budget usage
 
 ### v1 MVP Decisions (Locked)
 
