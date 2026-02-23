@@ -21,11 +21,18 @@ Add minimal web interfaces for hospital and developer portals to demonstrate use
 
 - [ ] 1. Set up project structure and core data models
   - Create Python project structure with FastAPI, Pydantic, Docker
-  - Define Pydantic models for Protocol Manifest, Training Request, and Attestation Receipt schemas
+  - Define Pydantic models for Protocol Manifest, Training Request, and Attestation Receipt schemas (including new fields: dataset version hash, model hash, baseline hash, cost model, redemption details)
   - Set up configuration management for system parameters
   - Initialize logging and error handling infrastructure
   - Create API gateway structure with REST endpoints
-  - _Requirements: 7.1, 9.1_
+  - Set up AWS Cognito for authentication (OAuth 2.0/JWT)
+  - Implement RBAC with roles: hospital_admin, hospital_compliance, ai_developer, regulator_readonly, system_operator
+  - _Requirements: 7.1, 9.1, 11.1, 11.2_
+  - _Phase: 1 - Core Protocol Demo_
+
+- [ ] 1.1 Write property test for authentication and authorization
+  - **Property 28: Authentication and Authorization**
+  - **Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5, 11.6**
   - _Phase: 1 - Core Protocol Demo_
 
 - [ ] 2. Implement Protocol Manifest management with templates
@@ -142,26 +149,31 @@ Add minimal web interfaces for hospital and developer portals to demonstrate use
 - [ ] 6. Build performance evaluation and deterministic credit minting engine
   - [ ] 6.1 Create model performance evaluator with NIS calculation
     - Implement performance evaluation against Protocol Manifest success metrics
-    - Add baseline model comparison functionality
+    - Add baseline model comparison functionality (baseline provided in .eif, evaluated inside enclave)
     - Implement Normalized Improvement Score (NIS) calculation: NIS = (NewMetric - BaselineMetric) / (1 - BaselineMetric)
     - Create performance improvement calculation accounting for diminishing returns
-    - _Requirements: 5.1, 5.2_
+    - Generate model hash, baseline hash, dataset version hash
+    - _Requirements: 5.1, 5.2, 13.2, 13.3, 13.4, 17.1, 17.2, 17.3_
     - _Phase: 1 - Core Protocol Demo_
   
-  - [ ] 6.2 Implement deterministic credit minting with protocol-defined caps
+  - [ ] 6.2 Implement deterministic credit minting with protocol-defined caps and duplicate prevention
     - Create protocol-defined credit bands mapping NIS ranges to SC amounts
     - Enforce hard caps: max credits per run (500 SC), max per hospital per model per year (5,000 SC)
     - Implement institutional-only credit allocation (Hospital/Data Fiduciary)
     - Prevent individual patient-level tracking
     - Prevent hospital discretion in credit assignment (anti-inflation)
-    - _Requirements: 5.3, 5.4, 5.7, 5.8, 5.9_
+    - Implement duplicate minting prevention: track (AI_Developer + Model Hash + Dataset Version Hash)
+    - Reject or apply diminishing returns for duplicate submissions
+    - _Requirements: 5.3, 5.4, 5.7, 5.8, 5.9, 17.4, 17.5, 17.7_
     - _Phase: 1 - Core Protocol Demo_
   
   - [ ] 6.3 Write property tests for credit minting
     - **Property 12: Normalized Improvement Score Calculation**
     - **Property 13: Deterministic Credit Minting with Caps**
     - **Property 14: Credit Settlement to Institutional Recipients**
-    - **Validates: Requirements 5.2, 5.3, 5.4, 5.5, 5.7, 5.8, 5.9**
+    - **Property 30: Baseline Model Validation**
+    - **Property 34: Duplicate Minting Prevention**
+    - **Validates: Requirements 5.2, 5.3, 5.4, 5.5, 5.7, 5.8, 5.9, 13.2, 13.3, 13.4, 13.5, 17.4, 17.5, 17.7**
     - _Phase: 1 - Core Protocol Demo_
 
 - [ ] 7. Implement mock settlement ledger
@@ -196,7 +208,7 @@ Add minimal web interfaces for hospital and developer portals to demonstrate use
     - _Phase: 1 - Core Protocol Demo_
 
 - [ ] 9. Build API endpoints for core protocol
-  - [ ] 9.1 Implement REST API endpoints with FastAPI
+  - [ ] 9.1 Implement REST API endpoints with FastAPI and rate limiting
     - POST /manifest - Create and validate manifests
     - GET /manifests - List available manifests
     - POST /training-request - Submit training jobs
@@ -204,46 +216,123 @@ Add minimal web interfaces for hospital and developer portals to demonstrate use
     - GET /receipt/{id} - Retrieve attestation receipts
     - GET /credits/{hospital-id} - View institutional credits
     - POST /verify-receipt - Third-party verification
+    - GET /audit/export/{job-id} - Export compliance reports
+    - GET /cost-estimate - Estimate training costs
+    - POST /dispute/trigger - Trigger manual audit
     - Add comprehensive error handling and diagnostics
-    - _Requirements: 7.1, 7.8, 9.4, 9.5_
+    - Implement API rate limiting via API Gateway
+    - Enforce request quotas per AI_Developer organization
+    - Limit maximum concurrent jobs per organization
+    - Deploy WAF for DDoS protection
+    - _Requirements: 7.1, 7.8, 9.4, 9.5, 20.1, 20.2, 20.3, 20.4, 20.5, 21.3, 22.1_
     - _Phase: 1 - Core Protocol Demo_
   
   - [ ] 9.2 Add API documentation
     - Generate OpenAPI/Swagger documentation
     - Add example requests and responses
     - Document authentication and authorization requirements
+    - Document rate limits and quotas
     - _Phase: 1 - Core Protocol Demo_
   
-  - [ ] 9.3 Write property test for secure API functionality
+  - [ ] 9.3 Write property tests for API functionality
     - **Property 24: Secure API Functionality**
-    - **Validates: Requirements 7.8, 9.4, 9.5**
+    - **Property 36: Rate Limiting and Abuse Prevention**
+    - **Property 38: Compliance Report Export**
+    - **Validates: Requirements 7.8, 9.4, 9.5, 20.1, 20.2, 20.3, 20.4, 20.5, 22.1, 22.2, 22.3, 22.4, 22.5, 22.6**
     - _Phase: 1 - Core Protocol Demo_
 
-- [ ] 10. Implement audit and compliance system
-  - [ ] 10.1 Create immutable audit repository
+- [ ] 10. Implement audit, compliance, and cost tracking systems
+  - [ ] 10.1 Create immutable audit repository with compliance export
     - Implement tamper-evident audit logging
     - Add cryptographic integrity checks for audit logs
     - Create verifiable compliance artifact generation
+    - Implement compliance report export in structured JSON format
+    - Add batch export capability for multiple jobs
+    - Include cryptographic signatures on exported reports
     - Implement regulatory reporting API endpoints
-    - _Requirements: 6.4, 6.5_
+    - _Requirements: 6.4, 6.5, 22.1, 22.2, 22.3, 22.4, 22.5, 22.6_
     - _Phase: 1 - Core Protocol Demo_
   
-  - [ ] 10.2 Write property test for audit compliance
+  - [ ] 10.2 Implement cost estimation and tracking
+    - Create cost estimation API based on instance type and training time
+    - Track actual compute costs per training job
+    - Include compute costs in attestation receipts
+    - Enforce developer payment responsibility
+    - Document cost model in Protocol Manifest
+    - _Requirements: 21.1, 21.2, 21.3, 21.4, 21.5, 21.7_
+    - _Phase: 1 - Core Protocol Demo_
+  
+  - [ ] 10.3 Implement dispute resolution system
+    - Create manual audit trigger API endpoint
+    - Add job state freeze capability
+    - Enable re-verification from logs and receipts
+    - Implement governance escalation workflow
+    - Maintain dispute resolution audit trail
+    - _Requirements: 19.1, 19.2, 19.3, 19.4, 19.5_
+    - _Phase: 1 - Core Protocol Demo_
+  
+  - [ ] 10.4 Write property tests for audit and cost systems
     - **Property 18: Audit Compliance**
-    - **Validates: Requirements 6.4, 6.5**
+    - **Property 37: Cost Transparency**
+    - **Validates: Requirements 6.4, 6.5, 21.1, 21.2, 21.3, 21.4, 21.5, 21.7, 22.1, 22.2, 22.3, 22.4, 22.5, 22.6**
     - _Phase: 1 - Core Protocol Demo_
 
-- [ ] 11. Checkpoint - Phase 1 Complete
+- [ ] 11. Implement hospital data management and dataset versioning
+  - [ ] 11.1 Create hospital data reference system
+    - Implement S3 bucket reference in Protocol Manifest (hospital-controlled)
+    - Add dataset version hash generation and validation
+    - Ensure Pramaan never accepts raw data uploads
+    - Validate data availability and SSE-KMS encryption before training
+    - Support optional pre-signed URLs for facilitated upload
+    - Enforce dataset immutability per manifest version
+    - Require new manifest version for dataset updates
+    - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.7, 18.1, 18.2, 18.3, 18.4, 18.5_
+    - _Phase: 1 - Core Protocol Demo_
+  
+  - [ ] 11.2 Write property tests for data upload security and dataset versioning
+    - **Property 29: Hospital Data Upload Security**
+    - **Property 35: Dataset Immutability**
+    - **Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.7, 18.1, 18.2, 18.3, 18.4, 18.5**
+    - _Phase: 1 - Core Protocol Demo_
+
+- [ ] 12. Implement failure handling and single-hospital scope enforcement
+  - [ ] 12.1 Create atomic training execution logic
+    - Implement atomic training job execution (no checkpoints)
+    - Add failure detection and job status update to "failed"
+    - Prevent credit minting for failed jobs
+    - Implement stakeholder notification on failure
+    - Allow re-submission after failure
+    - Explicitly prevent partial credit allocation
+    - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 15.7_
+    - _Phase: 1 - Core Protocol Demo_
+  
+  - [ ] 12.2 Enforce single hospital training scope
+    - Validate Protocol Manifest references exactly one Hospital/Data Fiduciary
+    - Reject multi-hospital collaboration requests
+    - Document federated learning as future roadmap (Pramaan-Federated)
+    - _Requirements: 16.1, 16.2, 16.3, 16.4_
+    - _Phase: 1 - Core Protocol Demo_
+  
+  - [ ] 12.3 Write property tests for failure handling and scope enforcement
+    - **Property 32: Atomic Training Execution**
+    - **Property 33: Single Hospital Training Scope**
+    - **Validates: Requirements 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 16.1, 16.2, 16.3**
+    - _Phase: 1 - Core Protocol Demo_
+
+- [ ] 13. Checkpoint - Phase 1 Complete
   - Ensure all Phase 1 tests pass
-  - Verify API endpoints functional
+  - Verify API endpoints functional with authentication and rate limiting
   - Test end-to-end flow with mock enclave
-  - Demo capability: Manifest creation → Request submission → Mock training → Credit minting → Attestation generation
+  - Verify duplicate minting prevention works
+  - Verify atomic failure handling works
+  - Verify cost estimation and tracking works
+  - Demo capability: Manifest creation → Request submission → Mock training → Credit minting → Attestation generation → Compliance export
   - _Phase: 1 - Core Protocol Demo_
 
 ### PHASE 2: Security Demo (Should Have)
 
-- [ ] 12. Integrate real AWS Nitro Enclaves
-  - [ ] 12.1 Set up AWS EC2 with Nitro Enclave support
+- [ ] 14. Integrate real AWS Nitro Enclaves
+  - [ ] 14.1 Set up AWS EC2 with Nitro Enclave support
     - Provision EC2 parent instance with enclave capabilities
     - Configure enclave resource allocation (CPU, memory)
     - Set up enclave networking and isolation policies

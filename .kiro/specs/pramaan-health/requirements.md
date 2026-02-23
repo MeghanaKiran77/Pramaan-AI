@@ -178,3 +178,159 @@ Pramaan-Health is a pilot implementation of the Pramaan AI protocol that enables
 3. WHEN system anomalies are detected, THE Pramaan_System SHALL automatically trigger incident response procedures
 4. THE Pramaan_System SHALL provide dashboards for tracking training jobs, credit allocations, and compliance status
 5. THE Pramaan_System SHALL maintain audit logs with tamper-evident properties for forensic analysis
+
+### Requirement 11: Authentication and Authorization
+
+**User Story:** As a system operator, I want secure authentication and role-based access control, so that only authorized entities can access system functions.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL use AWS Cognito for OAuth 2.0 and JWT-based authentication
+2. THE Pramaan_System SHALL implement role-based access control (RBAC) with roles: hospital_admin, hospital_compliance, ai_developer, regulator_readonly, system_operator
+3. THE Pramaan_System SHALL issue short-lived API tokens for programmatic access
+4. THE Pramaan_System SHALL use IAM role-based access for internal service-to-service communication (no static keys)
+5. THE Pramaan_System SHALL enforce role-based permissions on all API endpoints
+6. THE Pramaan_System SHALL implement session management for web portal access
+
+### Requirement 12: Healthcare Data Upload and Encryption
+
+**User Story:** As a Hospital, I want a secure mechanism to make my encrypted healthcare data available for training, so that data never leaves my control until enclave execution.
+
+#### Acceptance Criteria
+
+1. THE Hospital SHALL upload healthcare data directly to hospital-controlled S3 bucket
+2. THE Pramaan_System SHALL NOT accept raw healthcare data uploads directly
+3. THE Hospital SHALL use server-side encryption with hospital KMS key (SSE-KMS)
+4. THE Pramaan_System SHALL reference hospital S3 bucket location in Protocol Manifest
+5. THE Pramaan_System SHALL validate data availability and encryption before training
+6. THE Pramaan_System SHALL support optional pre-signed URLs for facilitated upload (if needed)
+7. FOR MVP, THE Hospital data SHALL already be encrypted in their S3 bucket before manifest creation
+
+### Requirement 13: Baseline Model Validation
+
+**User Story:** As a Hospital, I want baseline models to be validated fairly, so that credit minting is based on genuine improvement and not manipulated baselines.
+
+#### Acceptance Criteria
+
+1. THE AI_Developer SHALL provide baseline model inside the Enclave_Image_File (.eif)
+2. THE Secure_Enclave SHALL evaluate baseline model performance inside the trusted boundary
+3. THE Pramaan_System SHALL compute baseline metrics within enclave (not accept external claims)
+4. THE Pramaan_System SHALL NOT store baseline model code or weights outside enclave
+5. THE Protocol_Manifest SHALL enforce evaluation metrics that baseline must satisfy
+6. THE Pramaan_System SHALL validate baseline model against protocol-defined fairness criteria
+
+### Requirement 14: Credit Redemption Implementation
+
+**User Story:** As an AI_Developer, I want a clear implementation of Model Access redemption, so that I can provide capped API access to hospitals without IP risk.
+
+#### Acceptance Criteria
+
+1. THE AI_Developer SHALL host model API endpoint under their control
+2. THE Pramaan_System SHALL issue time-bound API tokens with capped inference limits
+3. THE Pramaan_System SHALL implement usage metering via developer-reported signed usage receipts or API gateway logs
+4. THE Pramaan_System SHALL deduct credits for each API call based on usage
+5. THE Pramaan_System SHALL restrict API access to verified public-sector endpoints only
+6. THE Pramaan_System SHALL prevent access after credit exhaustion or time expiration
+7. THE Pramaan_System SHALL maintain audit trail of all API usage for compliance
+
+### Requirement 15: Failure Recovery and Atomicity
+
+**User Story:** As a Hospital, I want clear guarantees about training job completion, so that I understand what happens if execution fails.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL treat training jobs as atomic operations
+2. WHEN enclave crashes or execution fails, THE training job SHALL be marked as failed
+3. THE Pramaan_System SHALL NOT mint credits for failed training jobs
+4. THE Pramaan_System SHALL notify Hospital and AI_Developer of job failure
+5. THE AI_Developer MAY re-submit training request after failure
+6. THE Pramaan_System SHALL NOT support partial credit allocation in v1
+7. THE Pramaan_System SHALL mark checkpoint/resume capability as future enhancement
+
+### Requirement 16: Single Hospital Training Scope
+
+**User Story:** As a system architect, I want clear boundaries on training scope, so that v1 complexity is manageable and federated learning is deferred.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL support single hospital per training job in v1
+2. THE Pramaan_System SHALL NOT support multi-hospital collaboration or federated learning in v1
+3. THE Protocol_Manifest SHALL reference exactly one Hospital/Data Fiduciary
+4. THE Pramaan_System SHALL explicitly document federated learning as future roadmap (Pramaan-Federated)
+
+### Requirement 17: Model and Dataset Versioning
+
+**User Story:** As a system operator, I want to prevent duplicate credit minting, so that developers cannot game the system by re-submitting identical models.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL generate model version hash for each trained model
+2. THE Pramaan_System SHALL generate baseline model hash for each training job
+3. THE Protocol_Manifest SHALL reference dataset version hash
+4. THE Pramaan_System SHALL tie credit minting to unique combination: (AI_Developer, Model Hash, Dataset Version Hash)
+5. WHEN identical model and dataset version are re-submitted, THE Pramaan_System SHALL NOT mint additional credits
+6. THE Pramaan_System SHALL mark diminishing return bands as future enhancement
+7. THE Attestation_Receipt SHALL include model version hash, baseline hash, and dataset version hash
+
+### Requirement 18: Dataset Immutability and Versioning
+
+**User Story:** As a Hospital, I want clear dataset versioning, so that I can update data while maintaining audit trail integrity.
+
+#### Acceptance Criteria
+
+1. THE Protocol_Manifest SHALL reference specific dataset version with hash
+2. WHEN Hospital updates dataset, THE Hospital SHALL create new manifest version
+3. THE Pramaan_System SHALL treat datasets as immutable per manifest version
+4. THE Pramaan_System SHALL validate dataset hash before training execution
+5. THE Attestation_Receipt SHALL reference dataset version hash for audit trail
+
+### Requirement 19: Dispute Resolution and Manual Audit
+
+**User Story:** As a Hospital compliance officer, I want dispute resolution mechanisms, so that I can challenge attestations if policy violations are suspected.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL provide manual audit trigger API endpoint
+2. WHEN manual audit is requested, THE Pramaan_System SHALL freeze job state
+3. THE Pramaan_System SHALL enable re-verification from logs and attestation receipts
+4. THE Pramaan_System SHALL support escalation to governance committee for dispute resolution
+5. THE Pramaan_System SHALL maintain dispute resolution audit trail
+
+### Requirement 20: Rate Limiting and Abuse Prevention
+
+**User Story:** As a system operator, I want rate limiting and abuse prevention, so that the system remains available and resistant to spam or DDoS attacks.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL implement API rate limiting via API Gateway
+2. THE Pramaan_System SHALL enforce request quotas per AI_Developer organization
+3. THE Pramaan_System SHALL limit maximum concurrent training jobs per organization
+4. THE Pramaan_System SHALL deploy Web Application Firewall (WAF) in front of web portals
+5. THE Pramaan_System SHALL log and alert on suspicious request patterns
+
+### Requirement 21: Cost Model and Payment
+
+**User Story:** As an AI_Developer, I want clear understanding of cost responsibilities, so that I can budget for training jobs appropriately.
+
+#### Acceptance Criteria
+
+1. THE AI_Developer SHALL pay all AWS compute costs for training execution
+2. THE Hospital SHALL NOT pay for training compute costs
+3. THE Pramaan_System SHALL provide cost estimation API before job submission
+4. THE Pramaan_System SHALL track actual compute costs per training job
+5. THE Pramaan_System SHALL include compute cost in attestation receipt for transparency
+6. THE Pramaan_System MAY charge platform fee as percentage of compute cost (future enhancement)
+7. THE Pramaan_System SHALL document cost model clearly in Protocol Manifest
+
+### Requirement 22: Regulatory Compliance Export
+
+**User Story:** As a Hospital compliance officer, I want exportable compliance reports, so that I can provide structured audit artifacts to regulators.
+
+#### Acceptance Criteria
+
+1. THE Pramaan_System SHALL provide compliance report export API: GET /audit/export/{job-id}
+2. THE compliance report SHALL include: Manifest ID, purpose, dataset scope, privacy budget, attestation hash, credit mint event
+3. THE Pramaan_System SHALL export compliance reports in structured JSON format
+4. THE Pramaan_System SHALL support batch export for multiple training jobs
+5. THE Pramaan_System SHALL include cryptographic signature on exported compliance reports
+6. THE Pramaan_System SHALL maintain export audit trail for regulatory review

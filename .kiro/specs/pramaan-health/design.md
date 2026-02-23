@@ -229,7 +229,7 @@ graph TB
 - Includes proofs of policy enforcement and privacy compliance
 - Generates merkle proofs of execution integrity
 - Embeds compliance statements in receipts
-- References manifest hash to prevent retroactive edits
+- References manifest hash, model hash, baseline hash, dataset version hash to prevent retroactive edits and duplicate minting
 - Interface: Internal service with hardware signing keys
 
 **Visibility Control Manager**
@@ -243,14 +243,86 @@ graph TB
 - Provides tamper-evident logging capabilities
 - Supports regulatory reporting requirements
 - Maintains immutable logs for forensic analysis
+- Provides compliance report export API: GET /audit/export/{job-id}
 - Interface: REST API for audit data retrieval
 
 **Regulatory Interface**
-- Provides standardized compliance reporting
+- Provides standardized compliance reporting in structured JSON format
 - Enables third-party attestation verification
 - Supports DPDP Act reporting requirements
 - Delivers judge-proof compliance statements
+- Supports batch export for multiple training jobs
 - Interface: REST API with regulatory data formats
+
+**Dispute Resolution Service**
+- Provides manual audit trigger API endpoint
+- Freezes job state for investigation
+- Enables re-verification from logs and attestation receipts
+- Supports escalation to governance committee
+- Maintains dispute resolution audit trail
+- Interface: REST API for dispute management
+
+### Authentication and Authorization Components
+
+**Identity Provider (AWS Cognito)**
+- Manages user authentication with OAuth 2.0 and JWT tokens
+- Issues short-lived API tokens for programmatic access
+- Handles session management for web portals
+- Interface: OAuth 2.0 endpoints
+
+**Authorization Service**
+- Implements role-based access control (RBAC)
+- Enforces roles: hospital_admin, hospital_compliance, ai_developer, regulator_readonly, system_operator
+- Validates permissions on all API endpoints
+- Uses IAM roles for internal service-to-service communication
+- Interface: Internal authorization middleware
+
+**API Gateway with Rate Limiting**
+- Exposes public REST/GraphQL endpoints
+- Implements API rate limiting per organization
+- Enforces request quotas per AI_Developer organization
+- Limits maximum concurrent training jobs per organization
+- Deploys Web Application Firewall (WAF) for DDoS protection
+- Logs and alerts on suspicious request patterns
+- Interface: AWS API Gateway with WAF integration
+
+### Data Management Components
+
+**Hospital Data Manager**
+- References hospital-controlled S3 buckets (Pramaan never accepts raw data uploads)
+- Validates data availability and encryption before training
+- Supports server-side encryption with hospital KMS key (SSE-KMS)
+- Generates pre-signed URLs for facilitated upload (optional)
+- Validates dataset hash against manifest specification
+- Interface: S3 integration API
+
+**Dataset Version Manager**
+- Tracks dataset versions with cryptographic hashes
+- Enforces dataset immutability per manifest version
+- References dataset hash, temporal range, sample size metadata in manifests
+- Requires new manifest version for dataset updates
+- Interface: Internal versioning service
+
+**Model Version Manager**
+- Generates model version hash for each trained model
+- Generates baseline model hash for each training job
+- Ties credit minting to unique combination: (AI_Developer, Model Hash, Dataset Version Hash)
+- Prevents duplicate credit minting for identical model+dataset combinations
+- Includes version hashes in attestation receipts
+- Interface: Internal versioning service
+
+### Cost Management Components
+
+**Cost Estimator**
+- Provides cost estimation API before job submission
+- Calculates AWS compute costs based on instance type and training time
+- Interface: REST API for cost estimation
+
+**Cost Tracker**
+- Tracks actual compute costs per training job
+- Includes compute cost in attestation receipt for transparency
+- Enforces developer payment responsibility for all training compute costs
+- Interface: Internal cost tracking service integrated with AWS billing
 
 ## Data Models
 
@@ -286,7 +358,11 @@ graph TB
       "startDate": "date",
       "endDate": "date"
     },
-    "sampleSize": "integer"
+    "sampleSize": "integer",
+    "datasetVersionHash": "string (SHA-256)",
+    "s3BucketLocation": "string (hospital-controlled S3 bucket URI)",
+    "encryptionMethod": "enum (SSE-KMS)",
+    "hospitalKmsKeyId": "string (AWS KMS key ID)"
   },
   "privacyGuardrails": {
     "epsilonBudget": "number",
@@ -310,7 +386,11 @@ graph TB
     ],
     "maxCreditsPerRun": "integer (e.g., 500)",
     "maxCreditsPerHospitalPerModelPerYear": "integer (e.g., 5000)",
-    "institutionalRecipient": "string (Hospital/Data Fiduciary ID)"
+    "institutionalRecipient": "string (Hospital/Data Fiduciary ID)",
+    "preventDuplicateMinting": {
+      "trackingKey": "string (AI_Developer + Model Hash + Dataset Version Hash)",
+      "duplicatePolicy": "enum (reject, diminishing-returns-future)"
+    }
   },
   "redemptionMechanics": {
     "modelAccessRequired": "boolean",
@@ -318,9 +398,17 @@ graph TB
       "type": "enum (api-inference-credits)",
       "cappedCredits": "integer",
       "timeBound": "duration",
-      "usageRestriction": "enum (public-sector-only)"
+      "usageRestriction": "enum (public-sector-only)",
+      "developerHostedEndpoint": "string (URL)",
+      "usageMetering": "enum (signed-usage-receipts, api-gateway-logs)",
+      "creditDeductionPerCall": "number"
     },
     "optionalInstitutionalAllocation": "string (program-level public health fund)"
+  },
+  "costModel": {
+    "computeCostResponsibility": "enum (ai-developer)",
+    "estimatedComputeCost": "number (USD)",
+    "platformFee": "number (percentage, optional for MVP)"
   },
   "developerAcceptance": {
     "acceptanceRequired": "boolean",
@@ -355,7 +443,9 @@ graph TB
     "eifHash": "string (SHA-256 hash)",
     "eifSize": "integer (bytes)",
     "eifUploadTimestamp": "timestamp",
-    "containsProprietaryCode": "boolean (true - not inspected by controller)"
+    "containsProprietaryCode": "boolean (true - not inspected by controller)",
+    "containsBaselineModel": "boolean (true)",
+    "baselineModelHash": "string (SHA-256 - computed inside enclave)"
   },
   "modelSpecification": {
     "architecture": "string",
@@ -367,7 +457,9 @@ graph TB
     "maxTrainingTime": "duration",
     "memoryRequirements": "string"
   },
-  "status": "enum (pending, approved, rejected, executing, completed)",
+  "status": "enum (pending, approved, rejected, executing, completed, failed)",
+  "failureReason": "string (optional - populated if status is failed)",
+  "atomicExecution": "boolean (true - no partial completion)",
   "submissionTimestamp": "timestamp",
   "signature": "string (cryptographic signature)"
 }
@@ -404,21 +496,46 @@ graph TB
   },
   "performanceResults": {
     "baselineMetric": "number",
+    "baselineModelHash": "string (SHA-256)",
     "newMetric": "number",
+    "trainedModelHash": "string (SHA-256)",
+    "datasetVersionHash": "string (SHA-256)",
     "normalizedImprovementScore": "number (NIS)",
     "nisFormula": "string (e.g., (NewMetric - BaselineMetric) / (1 - BaselineMetric))",
     "creditsAwarded": "integer",
     "creditBandApplied": "string",
     "institutionalRecipient": "string (Hospital/Data Fiduciary ID)",
-    "noIndividualPatientTracking": "boolean (true)"
+    "noIndividualPatientTracking": "boolean (true)",
+    "duplicateMintingPrevention": {
+      "trackingKey": "string (AI_Developer + Model Hash + Dataset Version Hash)",
+      "isDuplicate": "boolean",
+      "previousJobId": "string (UUID, if duplicate)"
+    }
   },
   "redemptionDetails": {
     "modelAccessGranted": "boolean",
     "apiInferenceCredits": "integer",
     "timeBound": "duration",
     "usageRestriction": "string (public-sector-only)",
+    "developerHostedEndpoint": "string (URL)",
+    "apiTokenIssued": "string (time-bound token)",
+    "usageMetering": "enum (signed-usage-receipts, api-gateway-logs)",
+    "creditDeductionPerCall": "number",
+    "remainingCredits": "integer",
     "noLifetimeFreeAccess": "boolean (true)",
     "noCashOut": "boolean (true)"
+  },
+  "costAccounting": {
+    "computeCostUSD": "number",
+    "computeCostResponsibility": "enum (ai-developer)",
+    "platformFee": "number (optional)",
+    "costTransparency": "boolean (true)"
+  },
+  "executionStatus": {
+    "jobStatus": "enum (completed, failed)",
+    "failureReason": "string (optional)",
+    "atomicExecution": "boolean (true)",
+    "noPartialCredits": "boolean (true)"
   },
   "cryptographicProofs": {
     "executionIntegrity": "string (merkle proof)",
@@ -659,6 +776,96 @@ Based on the prework analysis, I've identified the following testable properties
 **Property 27: Dashboard and Audit Logging**
 *For any* system metric or interaction, dashboards should display accurate tracking information and audit logs should maintain tamper-evident properties for forensic analysis
 **Validates: Requirements 10.4, 10.5**
+
+**Property 28: Authentication and Authorization**
+*For any* API request, the system should authenticate users via AWS Cognito (OAuth 2.0/JWT) and enforce role-based access control with proper permission validation
+**Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5, 11.6**
+
+**Property 29: Hospital Data Upload Security**
+*For any* healthcare data, the hospital should upload directly to hospital-controlled S3 bucket with SSE-KMS encryption, and Pramaan should never accept raw data uploads
+**Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.7**
+
+**Property 30: Baseline Model Validation**
+*For any* training job, the baseline model should be evaluated inside the enclave with metrics computed internally, and no external baseline claims should be accepted
+**Validates: Requirements 13.2, 13.3, 13.4, 13.5**
+
+**Property 31: Credit Redemption Implementation**
+*For any* Model Access redemption, the system should issue time-bound API tokens with capped limits, implement usage metering, deduct credits per call, and restrict access to public-sector endpoints
+**Validates: Requirements 14.2, 14.3, 14.4, 14.5, 14.6, 14.7**
+
+**Property 32: Atomic Training Execution**
+*For any* training job failure, the system should mark job as failed, not mint credits, notify stakeholders, and allow re-submission without partial credit allocation
+**Validates: Requirements 15.1, 15.2, 15.3, 15.4, 15.5, 15.6**
+
+**Property 33: Single Hospital Training Scope**
+*For any* training job, the system should enforce single hospital per job and reject multi-hospital collaboration requests in v1
+**Validates: Requirements 16.1, 16.2, 16.3**
+
+**Property 34: Duplicate Minting Prevention**
+*For any* training submission, the system should generate unique tracking key (AI_Developer + Model Hash + Dataset Version Hash) and prevent duplicate credit minting for identical combinations
+**Validates: Requirements 17.4, 17.5, 17.7**
+
+**Property 35: Dataset Immutability**
+*For any* manifest version, the dataset should be immutable with hash validation, and dataset updates should require new manifest versions
+**Validates: Requirements 18.2, 18.3, 18.4, 18.5**
+
+**Property 36: Rate Limiting and Abuse Prevention**
+*For any* API access, the system should enforce rate limits, request quotas per organization, concurrent job limits, and WAF protection
+**Validates: Requirements 20.1, 20.2, 20.3, 20.4, 20.5**
+
+**Property 37: Cost Transparency**
+*For any* training job, the system should provide cost estimation before submission, track actual costs, and include costs in attestation receipts with developer payment responsibility
+**Validates: Requirements 21.1, 21.2, 21.3, 21.4, 21.5, 21.7**
+
+**Property 38: Compliance Report Export**
+*For any* compliance export request, the system should generate structured JSON reports with manifest ID, purpose, dataset scope, privacy budget, attestation hash, credit events, and cryptographic signatures
+**Validates: Requirements 22.1, 22.2, 22.3, 22.4, 22.5, 22.6**
+
+## Implementation Decisions and Scope
+
+### v1 MVP Decisions (Locked)
+
+**Authentication:** AWS Cognito with OAuth 2.0/JWT, RBAC with 5 roles
+
+**Data Upload:** Hospital-controlled S3 buckets, SSE-KMS encryption, Pramaan never accepts raw data
+
+**Baseline Models:** Developer-provided inside .eif, enclave-validated, no external claims
+
+**Credit Redemption:** Developer-hosted API, Pramaan-issued time-bound tokens, usage metering, credit deduction per call
+
+**Failure Recovery:** Atomic training (no checkpoints), failed jobs mint no credits, re-submission allowed
+
+**Training Scope:** Single hospital per job (no federated learning in v1)
+
+**Model Versioning:** Duplicate minting prevention via (Developer + Model Hash + Dataset Hash) tracking
+
+**Dataset Versioning:** Immutable per manifest version, updates require new manifest
+
+**Dispute Resolution:** Manual audit trigger API, job state freeze, governance escalation
+
+**Rate Limiting:** API Gateway rate limits, per-org quotas, concurrent job limits, WAF protection
+
+**Cost Model:** Developer pays all compute costs, optional platform fee (future)
+
+**Compliance Export:** Structured JSON via GET /audit/export/{job-id}, cryptographically signed
+
+### Future Enhancements (Explicitly Deferred)
+
+**Pramaan-Federated:** Multi-hospital collaboration, federated learning
+
+**Advanced Failure Recovery:** Checkpoint/resume capability for long training jobs
+
+**Diminishing Returns:** Credit bands for repeated model+dataset combinations
+
+**Client-Side Encryption:** Advanced hospital data encryption before S3 upload
+
+**Baseline Registry:** Protocol-provided standardized baseline models
+
+**Platform Fee Model:** SaaS subscription or percentage-based platform fees
+
+**Advanced Dispute Resolution:** Automated re-verification, smart contract arbitration
+
+**Production Hardening:** Full AWS service integration, multi-region deployment, disaster recovery
 
 ## Error Handling
 
