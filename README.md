@@ -6,7 +6,7 @@ Pramaan AI (derived from the Sanskrit word for *proof, evidence, or validation*)
 
 Pramaan AI enables AI models to learn from the 'Dark Data' of Bharat (private health records, local dialects, agricultural logs) without the model ever 'seeing' the sensitive raw data.
 
-## 🎯 Vision
+## Vision
 
 Create a protocol that allows confidential AI training on sensitive data while maintaining:
 - **Data Sovereignty** - Data owners retain full control
@@ -14,27 +14,27 @@ Create a protocol that allows confidential AI training on sensitive data while m
 - **Verifiable Trust** - Cryptographic attestation of compliance
 - **Fair Incentives** - Non-monetary Social Credits for institutional contribution
 
-## 🏥 Pramaan-Health: Healthcare Pilot
+## Pramaan-Health: Healthcare Pilot
 
 This repository contains the specification for **Pramaan-Health**, a pilot implementation demonstrating confidential AI training on sensitive healthcare data.
 
 ### What Pramaan-Health IS
 
-✅ A protocol and enforcement layer  
-✅ A policy-as-code trust system  
-✅ A confidential AI training primitive  
-✅ A compliance-first infrastructure concept
+A protocol and enforcement layer  
+A policy-as-code trust system  
+A confidential AI training primitive  
+A compliance-first infrastructure concept
 
 ### What Pramaan-Health is NOT
 
-❌ An end-user application  
-❌ A healthcare analytics app  
-❌ A chatbot or data marketplace UI  
-❌ A full India Stack deployment
+An end-user application  
+A healthcare analytics app  
+A chatbot or data marketplace UI  
+A full India Stack deployment
 
-## 🏗️ Four-Layer Architecture
+## Architecture Overview
 
-Pramaan-Health is built as protocol-first infrastructure with minimal interfaces:
+Pramaan-Health is built as protocol-first infrastructure with four concrete layers:
 
 ### 🟦 Layer 1: Core Protocol Engine (Backend Services)
 **The main product** - Backend microservices implementing protocol logic:
@@ -48,7 +48,7 @@ Pramaan-Health is built as protocol-first infrastructure with minimal interfaces
 - Settlement service
 - Audit logger
 
-**Tech:** Python microservices, FastAPI, Pydantic, containerized (Docker), deployed on AWS
+**Tech:** Python microservices, FastAPI, Pydantic, containerized (Docker), deployed on AWS, exposed via REST/GraphQL APIs
 
 ### 🟩 Layer 2: Secure Execution Layer
 **The trust boundary** where confidential training occurs:
@@ -78,7 +78,7 @@ Pramaan-Health is built as protocol-first infrastructure with minimal interfaces
 
 **Developer Portal:** Browse manifests, accept terms, upload .eif, view status, download receipts
 
-**Note:** These are minimal functional interfaces for demonstration, not production-grade applications. The core value is in Layers 1-3.
+**Note:** These are minimal functional interfaces for demonstration, not production-grade applications. The core value is in Layers 1-3 (protocol infrastructure).
 
 ## 🎬 Demo Flow for Judges (3 Minutes)
 
@@ -252,8 +252,6 @@ This is an **architecture-first pilot** demonstrating:
 - Trust guarantees and verifiable compliance
 - Property-based testing of core protocols
 - Architectural validation of the four-layer design
-
-Not all AWS services are fully deployed end-to-end in this pilot.
 
 ## 🤝 Contributing
 
