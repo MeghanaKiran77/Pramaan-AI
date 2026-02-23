@@ -16,6 +16,64 @@ The architecture follows a four-layer design: Policy Layer (The Handshake), Exec
 
 ## Architecture
 
+The Pramaan-Health system employs a four-layer architecture designed for protocol-first infrastructure with minimal interfaces for demonstration:
+
+### Layer 1: Core Protocol Engine (Backend Services)
+The main product - backend microservices implementing the protocol logic:
+- Manifest validation service
+- Request validation service
+- Enclave orchestration service
+- DP-SGD enforcement logic
+- Evaluation engine
+- Credit computation engine
+- Attestation generator
+- Settlement service
+- Audit logger
+
+**Implementation:** Python microservices, containerized (Docker), deployed on AWS, exposed via REST/GraphQL APIs
+
+### Layer 2: Secure Execution Layer
+The trust boundary where confidential training occurs:
+- AWS EC2 with Nitro Enclaves
+- .eif image submission and validation
+- KMS-based key release (attestation-gated)
+- In-memory decryption only
+- Network egress denied by default
+
+**Implementation:** AWS Nitro Enclaves with hardware attestation
+
+### Layer 3: API Gateway
+Public-facing endpoints enabling integration:
+- `POST /manifest` - Create Protocol Manifest
+- `POST /training-request` - Submit training job
+- `GET /receipt/{id}` - Retrieve attestation receipt
+- `GET /credits/{hospital-id}` - View institutional credits
+- `GET /manifests` - Browse available manifests
+- `POST /verify-receipt` - Third-party attestation verification
+
+**Consumers:** Web UI, CLI tools, third-party systems, future mobile apps
+
+### Layer 4: Minimal Web Interfaces (Pilot Only)
+Thin demonstration interfaces (React/Next.js):
+
+**Hospital Portal:**
+- Create Manifest (template dropdown)
+- View training jobs
+- View attestation receipts
+- View earned Social Credits
+
+**Developer Portal:**
+- Browse available manifests
+- Accept manifest terms
+- Upload .eif files
+- View job status
+- View credits owed
+- Download attestation receipts
+
+**Note:** These are minimal functional interfaces for demonstration, not production-grade applications. The core value is in Layers 1-3 (protocol infrastructure).
+
+### System Architecture Diagram
+
 The Pramaan-Health system employs a distributed architecture with secure enclaves as the core trust boundary:
 
 ```mermaid
@@ -722,3 +780,101 @@ The Pramaan-Health system employs a dual testing approach combining unit tests a
 - System scalability testing for multiple concurrent training sessions
 
 The testing strategy ensures that both functional correctness and security guarantees are thoroughly validated before deployment.
+
+## Demo Flow for Judges
+
+This 3-minute demonstration showcases the complete Pramaan-Health protocol in action:
+
+### Demo Scenario
+**Use Case:** A district hospital wants to contribute diabetic retinopathy screening data for AI model training while maintaining patient privacy and DPDP Act compliance.
+
+### Flow (3 Minutes Total)
+
+**Step 1: Hospital Creates Manifest** (30 seconds)
+- Hospital admin logs into Hospital Portal
+- Selects "Create Manifest" 
+- Chooses template: "Diagnostic Classification - Public Health"
+- Configures:
+  - Purpose: Diabetic retinopathy detection improvement
+  - Dataset scope: 10,000 retinal images, 2020-2024
+  - Privacy budget: ε=3.0, δ=1e-5
+  - Success metric: AUROC > 0.85
+  - Model Access: Required (500 API credits, 6 months, public-sector only)
+- Clicks "Publish Manifest"
+- System validates and publishes manifest with cryptographic signature
+
+**Step 2: AI Developer Submits Training Request** (30 seconds)
+- Developer logs into Developer Portal
+- Browses available manifests, finds diabetic retinopathy manifest
+- Reviews terms: privacy budget, success criteria, Model Access redemption
+- Clicks "Accept Terms" (binary decision, no negotiation)
+- Uploads Enclave Image File (.eif) containing proprietary training code
+- Submits training request
+- System validates .eif hash and queues job
+
+**Step 3: Backend Execution** (1 minute - show logs/monitoring)
+- Enclave orchestrator provisions AWS Nitro Enclave
+- KMS releases decryption keys after attestation verification (PCR-based)
+- Data decrypted in enclave memory only
+- DP-SGD training executes with privacy budget tracking
+- Baseline model: AUROC = 0.78
+- Trained model: AUROC = 0.88
+- NIS calculation: (0.88 - 0.78) / (1 - 0.78) = 0.45
+- Credit minting: NIS 0.45 → 350 Social Credits (protocol-defined band)
+- Data destruction proof generated
+- Network isolation verified (no egress)
+
+**Step 4: Attestation Receipt Generation** (30 seconds)
+- System generates comprehensive Attestation Receipt with:
+  - Cryptographic signature (hardware-backed)
+  - Privacy accounting proof: ε=2.8 used, δ=8e-6 used
+  - Data destruction timestamp and proof
+  - Performance results: AUROC 0.88, NIS 0.45, 350 SC awarded
+  - Merkle proof of execution integrity
+  - Manifest hash reference (prevents retroactive edits)
+  - Judge-proof compliance statements
+- Receipt stored in immutable audit repository
+- Credits recorded on Settlement Ledger (Hyperledger Fabric)
+- Hospital receives 350 SC (institutional allocation, no patient tracking)
+
+**Step 5: API Integration Demo** (30 seconds)
+- Show API documentation (Swagger/OpenAPI)
+- Demonstrate programmatic access:
+  - `GET /receipt/{id}` - Third-party verification
+  - `GET /credits/{hospital-id}` - Credit balance query
+  - `POST /verify-receipt` - Cryptographic verification
+- Highlight: No UI required for integration, pure protocol access
+
+### What Judges See
+
+**Technical Depth:**
+- Real Nitro Enclave integration (not simulated)
+- Real DP-SGD implementation (Opacus)
+- Deterministic credit minting with NIS normalization
+- Hardware-backed cryptographic attestation
+
+**Protocol Design:**
+- Template-driven manifests (no free-form contracts)
+- Binary developer acceptance (no negotiation)
+- Standardized redemption (no IP conflicts)
+- Symmetric confidentiality (hospital data + developer IP)
+
+**Compliance & Trust:**
+- DPDP Act compliance artifacts
+- Immutable audit trails
+- Third-party verifiable attestations
+- Judge-proof compliance statements
+
+**Infrastructure Thinking:**
+- API-first design (like UPI)
+- Minimal UI (protocol is the product)
+- Extensible for future integrations
+- Clear separation of concerns across 4 layers
+
+### What Judges DON'T See
+- Pixel-perfect dashboards
+- Complex user workflows
+- Regulator UI (API-only is sufficient)
+- Production-scale deployment (pilot scope is clear)
+
+This demo proves: **Pramaan-Health is real infrastructure, not vaporware.**

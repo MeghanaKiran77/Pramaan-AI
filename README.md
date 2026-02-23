@@ -32,9 +32,116 @@ This repository contains the specification for **Pramaan-Health**, a pilot imple
 ❌ A chatbot or data marketplace UI  
 ❌ A full India Stack deployment
 
-## 🏗️ Architecture Overview
+## 🏗️ Four-Layer Architecture
 
-Pramaan-Health implements a **four-layer architecture**:
+Pramaan-Health is built as protocol-first infrastructure with minimal interfaces:
+
+### 🟦 Layer 1: Core Protocol Engine (Backend Services)
+**The main product** - Backend microservices implementing protocol logic:
+- Manifest validation service
+- Request validation service  
+- Enclave orchestration service
+- DP-SGD enforcement logic
+- Evaluation engine
+- Credit computation engine (NIS calculation, deterministic minting)
+- Attestation generator
+- Settlement service
+- Audit logger
+
+**Tech:** Python microservices, FastAPI, Pydantic, containerized (Docker), deployed on AWS
+
+### 🟩 Layer 2: Secure Execution Layer
+**The trust boundary** where confidential training occurs:
+- AWS EC2 with Nitro Enclaves
+- .eif image submission and validation
+- KMS-based key release (attestation-gated)
+- In-memory decryption only
+- Network egress denied by default
+- Symmetric confidentiality (hospital data + developer IP)
+
+**Tech:** AWS Nitro Enclaves, AWS KMS, hardware attestation
+
+### 🟨 Layer 3: API Gateway
+**Public-facing endpoints** enabling integration:
+- `POST /manifest` - Create Protocol Manifest
+- `POST /training-request` - Submit training job
+- `GET /receipt/{id}` - Retrieve attestation receipt
+- `GET /credits/{hospital-id}` - View institutional credits
+- `POST /verify-receipt` - Third-party verification
+
+**Consumers:** Web UI, CLI tools, third-party systems, future mobile apps
+
+### 🟧 Layer 4: Minimal Web Interfaces (Pilot Only)
+**Thin demonstration UIs** (React/Next.js):
+
+**Hospital Portal:** Create manifests (template dropdown), view jobs, view receipts, view credits
+
+**Developer Portal:** Browse manifests, accept terms, upload .eif, view status, download receipts
+
+**Note:** These are minimal functional interfaces for demonstration, not production-grade applications. The core value is in Layers 1-3.
+
+## 🎬 Demo Flow for Judges (3 Minutes)
+
+**Scenario:** District hospital contributes diabetic retinopathy screening data for AI training
+
+### Step 1: Hospital Creates Manifest (30s)
+- Admin logs into Hospital Portal
+- Selects template: "Diagnostic Classification - Public Health"
+- Configures: Purpose, dataset scope (10K images), privacy budget (ε=3.0), success metric (AUROC > 0.85), Model Access (500 API credits, 6 months)
+- Clicks "Publish" → System validates and signs manifest
+
+### Step 2: Developer Submits Request (30s)
+- Developer logs into Developer Portal
+- Browses manifests, finds diabetic retinopathy
+- Reviews terms, clicks "Accept" (binary, no negotiation)
+- Uploads .eif file (proprietary training code)
+- Submits request → System validates .eif hash and queues job
+
+### Step 3: Backend Execution (1min - show logs)
+- Enclave provisions, KMS releases keys after attestation
+- Data decrypted in enclave memory only
+- DP-SGD training executes with privacy tracking
+- Results: Baseline AUROC 0.78 → Trained 0.88
+- NIS = (0.88 - 0.78) / (1 - 0.78) = 0.45
+- Credits minted: 350 SC (protocol-defined band)
+- Data destruction proof generated
+
+### Step 4: Attestation Receipt (30s)
+- Comprehensive receipt generated with:
+  - Hardware-backed signature
+  - Privacy proof: ε=2.8 used
+  - Data destruction timestamp
+  - Performance: AUROC 0.88, NIS 0.45, 350 SC
+  - Merkle proof, manifest hash
+  - Judge-proof compliance statements
+- Credits recorded on Settlement Ledger
+- Hospital receives 350 SC (institutional, no patient tracking)
+
+### Step 5: API Integration (30s)
+- Show OpenAPI docs
+- Demonstrate: `GET /receipt/{id}`, `GET /credits/{hospital-id}`, `POST /verify-receipt`
+- Highlight: No UI required, pure protocol access
+
+**What Judges See:** Real Nitro integration, real DP-SGD, deterministic credit minting, hardware attestation, clean API design, minimal but functional interface
+
+## 🚀 Implementation Phases
+
+### Phase 1: Core Protocol Demo (Must Have)
+Core protocol engine with mock enclave, deterministic credit minting, API endpoints, attestation generation
+
+**Demo Capability:** Complete protocol flow with mock security
+
+### Phase 2: Security Demo (Should Have)
+Real AWS Nitro Enclaves, real DP-SGD with Opacus, hardware-backed attestation, audit system
+
+**Demo Capability:** Prove real confidential computing and cryptographic guarantees
+
+### Phase 3: UI Layer (Nice to Have)
+Minimal Hospital Portal and Developer Portal
+
+**Demo Capability:** User-friendly interaction model
+
+## 🏗️ Protocol Architecture Details
 
 ### 1. The Handshake - Policy Layer
 Machine-readable Protocol Manifests define legal-technical contracts between hospitals (Data Fiduciaries) and AI developers (Data Consumers). These manifests encode:
